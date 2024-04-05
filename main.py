@@ -12,14 +12,16 @@ TOKEN = os.getenv("TOKEN")
 PREFIX = ";"
 COMMAND_HELP = "help"
 COMMAND_ROLL = "roll"
+COMMAND_ABILITIES = "abilities"
 
 STAGE_COUNT = 0
 STAGE_SIZE = 1
 
 HELP_MESSAGE = """
-I roll dice. I only have two commands:
+I roll dice. I only have three commands:
 **;help** -> You're looking at this.
-**;roll** -> rolls dice. Format is ;roll [x]d[y][a/d].
+**;abilities** -> Rolls a set of 6 ability scores. (4d6, drop lowest, take sum)
+**;roll** -> Rolls dice. Format is ;roll [x]d[y][a/d].
 - x -> number of dice. Defaults to 1.
 - y -> size of dice. Defaults to 20
 - a/d -> advantage or disadvantage respectively.
@@ -38,6 +40,8 @@ client = discord.Client(intents=intents)
 
 
 def do_roll(dice_count: int = 1, dice_size: int = 20):
+    dice_count = max(1,min(dice_count, 50))
+    dice_size = max(2,min(dice_size, 100))
     rolls = []
     total = 0
     for _ in range(dice_count):
@@ -46,6 +50,7 @@ def do_roll(dice_count: int = 1, dice_size: int = 20):
         total += v
     return total, rolls
     
+
 
 
 async def help(message:discord.message.Message):
@@ -103,9 +108,6 @@ async def roll(message:discord.message.Message, rollParams: list[str]):
             else:
                 dice_size = 20
 
-    dice_count = min(dice_count, 50)
-    dice_size = min(dice_size, 100)
-
     outRoll = do_roll(dice_count=dice_count, dice_size=dice_size)       
     if (advantage != None):
         rollA = outRoll
@@ -140,6 +142,33 @@ async def roll(message:discord.message.Message, rollParams: list[str]):
         await message.channel.send(out)
 
 
+async def roll_abilities(message:discord.message.Message):
+    abilities = []
+    for _ in range(6):
+        ability = do_roll(4,6)
+        min_roll = 10
+        for r in ability[1]:
+            if (r < min_roll):
+                min_roll = r
+        ability = (ability[0]-min_roll, ability[1], min_roll)
+        abilities.append(ability)
+    
+    out = f'**{message.author}** rolled some ability scores (4d6, drop lowest):'
+    for r in abilities:
+        struck_lowest = False
+        roll_list = []
+        for a in r[1]:
+            if (a == r[2] and not struck_lowest):
+                roll_list.append(f'~~{a}~~')
+                struck_lowest = True
+            else:
+                roll_list.append(f'{a}')
+
+        out += f'\n- [{", ".join(roll_list)}] for a total of **{r[0]}**'
+    
+    await message.channel.send(out)
+    
+
 async def handle_command(message: discord.message.Message, data: list[str]):
     command = data[0]
 
@@ -147,11 +176,13 @@ async def handle_command(message: discord.message.Message, data: list[str]):
         await help(message)
     elif (command == COMMAND_ROLL):
         await roll(message, data[1:])
+    elif (command == COMMAND_ABILITIES):
+        await roll_abilities(message)
 
 @client.event
 async def on_ready():
     logger.info(f'{client.user} has connected to Discord!')
-    await client.change_presence(activity=discord.CustomActivity("Listening for ;roll or ;help"))
+    await client.change_presence(activity=discord.CustomActivity("Listening for ;roll, ;abilities or ;help"))
 
 
 @client.event
